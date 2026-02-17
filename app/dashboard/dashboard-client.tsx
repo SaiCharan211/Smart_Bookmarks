@@ -1,156 +1,3 @@
-// "use client";
-
-// import { useEffect, useState } from "react";
-// import { createClient } from "@/lib/supabase/client";
-
-// type Bookmark = {
-//   id: string;
-//   title: string;
-//   url: string;
-//   user_id: string;
-//   created_at: string;
-// };
-
-// export default function DashboardClient({
-//   user,
-//   initialBookmarks,
-// }: {
-//   user: any;
-//   initialBookmarks: Bookmark[];
-// }) {
-//   const supabase = createClient();
-
-//   const [bookmarks, setBookmarks] =
-//     useState<Bookmark[]>(initialBookmarks);
-
-//   const [title, setTitle] = useState("");
-//   const [url, setUrl] = useState("");
-
-//   useEffect(() => {
-//     if (!user?.id) return;
-
-//     const channel = supabase
-//       .channel(`bookmarks-${user.id}`)
-//       .on(
-//         "postgres_changes",
-//         {
-//           event: "*",
-//           schema: "public",
-//           table: "bookmarks",
-//           filter: `user_id=eq.${user.id}`,
-//         },
-//         (payload) => {
-//           console.log("REALTIME:", payload);
-
-//           if (payload.eventType === "INSERT") {
-//             setBookmarks((prev) => [
-//               payload.new as Bookmark,
-//               ...prev,
-//             ]);
-//           }
-
-//           if (payload.eventType === "DELETE") {
-//             setBookmarks((prev) =>
-//               prev.filter((b) => b.id !== payload.old.id)
-//             );
-//           }
-//         }
-//       )
-//       .subscribe((status) => {
-//         console.log("STATUS:", status);
-//       });
-
-//     return () => {
-//       supabase.removeChannel(channel);
-//     };
-//   }, [user?.id]);
-
-//   const addBookmark = async () => {
-//     if (!title || !url) return;
-
-//     await supabase.from("bookmarks").insert({
-//       title,
-//       url,
-//       user_id: user.id,
-//     });
-
-//     setTitle("");
-//     setUrl("");
-//   };
-
-//   const deleteBookmark = async (id: string) => {
-//     await supabase.from("bookmarks").delete().eq("id", id);
-//   };
-
-//   const logout = async () => {
-//     await supabase.auth.signOut();
-//     window.location.href = "/";
-//   };
-
-//   return (
-//     <div className="max-w-xl mx-auto mt-10">
-//       <div className="flex justify-between mb-6">
-//         <h1 className="text-xl font-bold">My Bookmarks</h1>
-//         <button
-//           onClick={logout}
-//           className="text-sm underline"
-//         >
-//           Logout
-//         </button>
-//       </div>
-
-//       <div className="flex gap-2 mb-6">
-//         <input
-//           className="border p-2 flex-1"
-//           placeholder="Title"
-//           value={title}
-//           onChange={(e) => setTitle(e.target.value)}
-//         />
-//         <input
-//           className="border p-2 flex-1"
-//           placeholder="URL"
-//           value={url}
-//           onChange={(e) => setUrl(e.target.value)}
-//         />
-//         <button
-//           onClick={addBookmark}
-//           className="bg-black text-white px-4"
-//         >
-//           Add
-//         </button>
-//       </div>
-
-//       <ul className="space-y-3">
-//         {bookmarks.map((b) => (
-//           <li
-//             key={b.id}
-//             className="flex justify-between border p-3 rounded"
-//           >
-//             <a href={b.url} target="_blank">
-//               {b.title}
-//             </a>
-
-//             <button
-//               onClick={() => deleteBookmark(b.id)}
-//               className="text-red-500"
-//             >
-//               Delete
-//             </button>
-//           </li>
-//         ))}
-//       </ul>
-//     </div>
-//   );
-// }
-
-
-
-
-
-
-
-
-
 "use client";
 
 import { useEffect, useState, useRef } from "react";
@@ -209,7 +56,6 @@ export default function DashboardClient({
   const [errorMsg, setErrorMsg] = useState("");
   const titleRef = useRef<HTMLInputElement>(null);
 
-  // ─── Realtime subscription ───────────────────────────────────────────────
   useEffect(() => {
     if (!user?.id) return;
 
@@ -227,7 +73,6 @@ export default function DashboardClient({
           if (payload.eventType === "INSERT") {
             const incoming = payload.new as Bookmark;
             setBookmarks((prev) => {
-              // Avoid duplicates if optimistic item already exists with same id
               const exists = prev.some((b) => b.id === incoming.id);
               if (exists) return prev;
               return [incoming, ...prev];
@@ -257,13 +102,11 @@ export default function DashboardClient({
     };
   }, [user?.id]);
 
-  // ─── Add bookmark ─────────────────────────────────────────────────────────
   const addBookmark = async () => {
     const trimmedTitle = title.trim();
     const trimmedUrl = url.trim();
     if (!trimmedTitle || !trimmedUrl) return;
 
-    // Validate URL
     try {
       new URL(trimmedUrl);
     } catch {
@@ -274,7 +117,6 @@ export default function DashboardClient({
     setStatus("adding");
     setErrorMsg("");
 
-    // Optimistic insert
     const tempId = `optimistic-${crypto.randomUUID()}`;
     const optimistic: Bookmark = {
       id: tempId,
@@ -295,7 +137,6 @@ export default function DashboardClient({
       .single();
 
     if (error) {
-      // Roll back optimistic item
       setBookmarks((prev) => prev.filter((b) => b.id !== tempId));
       setTitle(trimmedTitle);
       setUrl(trimmedUrl);
@@ -304,7 +145,6 @@ export default function DashboardClient({
       return;
     }
 
-    // Replace optimistic item with real DB record
     setBookmarks((prev) =>
       prev.map((b) => (b.id === tempId ? (data as Bookmark) : b))
     );
@@ -313,16 +153,13 @@ export default function DashboardClient({
     titleRef.current?.focus();
   };
 
-  // ─── Delete bookmark ──────────────────────────────────────────────────────
   const deleteBookmark = async (id: string) => {
-    // Optimistic delete
     setDeletingIds((prev) => new Set(prev).add(id));
     setBookmarks((prev) => prev.filter((b) => b.id !== id));
 
     const { error } = await supabase.from("bookmarks").delete().eq("id", id);
 
     if (error) {
-      // Roll back — we'd need the original bookmark; keep it simple and refresh
       setErrorMsg("Failed to delete bookmark.");
       setDeletingIds((prev) => {
         const next = new Set(prev);
@@ -338,13 +175,11 @@ export default function DashboardClient({
     }
   };
 
-  // ─── Logout ───────────────────────────────────────────────────────────────
   const logout = async () => {
     await supabase.auth.signOut();
     window.location.href = "/";
   };
 
-  // ─── Handle Enter key ─────────────────────────────────────────────────────
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") addBookmark();
   };
@@ -759,7 +594,6 @@ export default function DashboardClient({
 
       <div className="wrapper">
 
-        {/* ── Header ── */}
         <header className="header">
           <div className="header-left">
             <h1>Bookmarks</h1>
@@ -776,7 +610,6 @@ export default function DashboardClient({
           </div>
         </header>
 
-        {/* ── Add form ── */}
         <div className="add-form">
           <span className="add-form-label">Add bookmark</span>
           <div className="input-row">
@@ -813,7 +646,6 @@ export default function DashboardClient({
           )}
         </div>
 
-        {/* ── List ── */}
         <div className="list-header">
           <span className="list-title">Saved links</span>
           <span className="count-badge">{bookmarks.length}</span>
@@ -837,7 +669,6 @@ export default function DashboardClient({
                   key={b.id}
                   className={`bookmark-item${isOptimistic ? " optimistic" : ""}${isDeleting ? " deleting" : ""}`}
                 >
-                  {/* Favicon */}
                   <div className="favicon-wrap">
                     {favicon ? (
                       <img
@@ -852,7 +683,6 @@ export default function DashboardClient({
                     )}
                   </div>
 
-                  {/* Info */}
                   <div className="bookmark-info">
                     <a
                       className="bookmark-title"
@@ -879,7 +709,6 @@ export default function DashboardClient({
                     </div>
                   </div>
 
-                  {/* Delete */}
                   {!isOptimistic && (
                     <button
                       className="btn-delete"
